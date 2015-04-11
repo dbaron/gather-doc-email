@@ -106,14 +106,14 @@ def gather_archives(mailbox_url, search_terms, destio):
             header_name = header_name.lower()
             if header_name == "message-id":
                 message_id = header_value
-            elif header_name == "in-reply-to:":
+            elif header_name == "in-reply-to":
                 if not include:
                     if header_value in message_ids_included:
                         # This is a reply to a message in our set.
                         include = True
             elif header_name == "references":
                 if not include:
-                    for reference in ws_re.split("header_value"):
+                    for reference in ws_re.split(header_value):
                         if reference in message_ids_included:
                             # This is a reply to a message in our set.
                             include = True
