@@ -84,18 +84,43 @@ def generate_headers(message_string):
     # Yield the last header of a message with no body.
     yield [header_name, header_value.rstrip("\n\r")]
 
-def gather_archives(mailbox_url, search_terms, destination_mbox):
+ws_re = re.compile("[ \t\n\r]+")
+def gather_archives(mailbox_url, search_terms, destio):
     io = cStringIO.StringIO()
     fetch_https_securely(mailbox_url, io,
                          username=passwords.get_w3c_username(),
                          password=passwords.get_w3c_password())
     month_message_str = io.getvalue()
     io.close()
+
+    message_ids_included = set()
     for message in generate_messages(month_message_str):
+        include = False
+        message_id = None
         for [header_name, header_value] in generate_headers(message):
-            # WRITE ME
-            pass
-        # WRITE ME
+            header_name = header_name.lower()
+            if header_name == "message-id":
+                message_id = header_value
+            elif header_name == "in-reply-to:":
+                if not include:
+                    if header_value in message_ids_included:
+                        # This is a reply to a message in our set.
+                        include = True
+            elif header_name == "references":
+                if not include:
+                    for reference in ws_re.split("header_value"):
+                        if reference in message_ids_included:
+                            # This is a reply to a message in our set.
+                            include = True
+                            break
+        if not include:
+            for term in search_terms:
+                if message.find(term) != -1:
+                    include = True
+                    break
+        if include:
+            message_ids_included.add(message_id)
+            destio.write(message)
 
 def validate_year(s):
     result = int(s)
@@ -131,10 +156,16 @@ if __name__ == '__main__':
         search_terms.append(term)
     destination_mbox = raw_input("Destination mailbox file: ")
 
+    if os.path.exists(destination_mbox):
+        raise StandardError("destination file {0} exists".format(destination_mbox))
+    destio = open(destination_mbox, "w")
+
     while current_date <= end_date:
         mailbox_url = "https://lists.w3.org/Archives/Public/{0}/mboxes/{1}.mbx".format(mailing_list, current_date.isoformat()[0:7])
-        gather_archives(mailbox_url, search_terms, destination_mbox)
+        gather_archives(mailbox_url, search_terms, destio)
 
         # increment 31 days, and then set day-of-month back to 1
         current_date = current_date + datetime.timedelta(31)
         current_date = datetime.date(current_date.year, current_date.month, 1)
+
+    destio.close()
