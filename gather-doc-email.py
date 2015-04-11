@@ -86,6 +86,11 @@ def generate_headers(message_string):
 
 ws_re = re.compile("[ \t\n\r]+")
 def gather_archives(mailbox_url, search_terms, destio):
+    """Download the mailbox at mailbox_url, and write every message
+    containing one of the terms in search_terms, or a message
+    (transitively) in reply to one of those messages, to destio,
+    the output mailbox stream."""
+
     io = cStringIO.StringIO()
     fetch_https_securely(mailbox_url, io,
                          username=passwords.get_w3c_username(),
