@@ -20,6 +20,8 @@ passwords = imp.load_source("passwords",
 # it actually does certificate checking, unlike httplib or urllib.
 # See http://pycurl.sourceforge.net/doc/pycurl.html for pycurl docs.
 def fetch_https_securely(url, destio, username=None, password=None):
+    """Write the resource at url into destio, verifying certificates
+    correctly in the process."""
     curl = pycurl.Curl()
     curl.setopt(pycurl.CAINFO, "/etc/ssl/certs/ca-certificates.crt")
     curl.setopt(pycurl.SSL_VERIFYPEER, 1)
@@ -35,6 +37,8 @@ def fetch_https_securely(url, destio, username=None, password=None):
         raise StandardError("HTTP response code " + str(respcode) + " retrieving " + url)
 
 def generate_messages(mailbox_string):
+    """Given a mailbox as a string, generate the messages in
+    that mailbox (each as a string)."""
     if mailbox_string == "":
         return
     if not mailbox_string[0:5] == "From ":
@@ -49,6 +53,37 @@ def generate_messages(mailbox_string):
         message_start = message_end
     yield mailbox_string[message_start:]
 
+def generate_headers(message_string):
+    """Given an email message as a string, generate the sequence
+    of [header_name, header_value] pairs for the email message."""
+    header_name = None
+    header_value = None
+    for line in cStringIO.StringIO(message_string):
+        if line[0:5] == "From ":
+            if header_name is not None:
+                raise StandardError("unexpected message format")
+            continue
+        # Continued header fields are always space or tab; see RFC 5322
+        # sections 2.2 and 2.2.3.
+        if line[0] == " " or line[0] == "\t":
+            # Is there a correct way to normalize away the extra spaces?
+            header_value += line
+            continue
+        # Yield what we found the last iteration.
+        if header_name is not None:
+            yield [header_name, header_value.rstrip("\n\r")]
+        # RFC5322, section 2.1 says a blank line (terminated by CRLF)
+        # separates the headers from the body.
+        if line.rstrip("\n\r") == "":
+            return
+        colon_idx = line.find(":")
+        if colon_idx == -1:
+            raise StandardError("unexpected message header")
+        header_name = line[0 : colon_idx]
+        header_value = line[colon_idx + 1 : ].lstrip(" \t")
+    # Yield the last header of a message with no body.
+    yield [header_name, header_value.rstrip("\n\r")]
+
 def gather_archives(mailbox_url, search_terms, destination_mbox):
     io = cStringIO.StringIO()
     fetch_https_securely(mailbox_url, io,
@@ -57,8 +92,10 @@ def gather_archives(mailbox_url, search_terms, destination_mbox):
     month_message_str = io.getvalue()
     io.close()
     for message in generate_messages(month_message_str):
+        for [header_name, header_value] in generate_headers(message):
+            # WRITE ME
+            pass
         # WRITE ME
-        pass
 
 def validate_year(s):
     result = int(s)
