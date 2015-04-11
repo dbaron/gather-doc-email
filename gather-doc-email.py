@@ -1,32 +1,64 @@
 #!/usr/bin/python
 
+import cStringIO
 import datetime
 import pycurl
 import re
+import io
+import os
+import os.path
+
+# ~/.passwords.py must define two functions:
+#   get_w3c_username()
+#   get_w3c_password()
+# each of which return a string
+import imp
+passwords = imp.load_source("passwords",
+                            os.path.join(os.getenv("HOME"), ".passwords.py"))
 
 # Use pycurl as suggested in http://stackoverflow.com/a/1921551, since
 # it actually does certificate checking, unlike httplib or urllib.
 # See http://pycurl.sourceforge.net/doc/pycurl.html for pycurl docs.
-def fetch_https_securely(url, destination, username=None, password=None):
+def fetch_https_securely(url, destio, username=None, password=None):
     curl = pycurl.Curl()
     curl.setopt(pycurl.CAINFO, "/etc/ssl/certs/ca-certificates.crt")
     curl.setopt(pycurl.SSL_VERIFYPEER, 1)
     curl.setopt(pycurl.SSL_VERIFYHOST, 2)
     curl.setopt(pycurl.URL, url)
-    io = open(destination, "w")
-    curl.setopt(pycurl.WRITEFUNCTION, io.write)
+    curl.setopt(pycurl.WRITEFUNCTION, destio.write)
     if username is not None or password is not None:
         curl.setopt(pycurl.USERPWD, username + ":" + password)
     curl.perform()
 
     respcode = curl.getinfo(pycurl.RESPONSE_CODE)
-    io.close()
     if respcode != 200:
         raise StandardError("HTTP response code " + str(respcode) + " retrieving " + url)
 
+def generate_messages(mailbox_string):
+    if mailbox_string == "":
+        return
+    if not mailbox_string[0:5] == "From ":
+        raise StandardError("unexpected mailbox")
+    message_start = 0
+    while True:
+        message_end = mailbox_string.find("\nFrom ", message_start + 5)
+        if message_end == -1:
+            break
+        message_end = message_end + 1
+        yield mailbox_string[message_start:message_end]
+        message_start = message_end
+    yield mailbox_string[message_start:]
+
 def gather_archives(mailbox_url, search_terms, destination_mbox):
-    # FIXME: WRITE ME
-    print mailbox_url
+    io = cStringIO.StringIO()
+    fetch_https_securely(mailbox_url, io,
+                         username=passwords.get_w3c_username(),
+                         password=passwords.get_w3c_password())
+    month_message_str = io.getvalue()
+    io.close()
+    for message in generate_messages(month_message_str):
+        # WRITE ME
+        pass
 
 def validate_year(s):
     result = int(s)
@@ -60,7 +92,6 @@ if __name__ == '__main__':
         if not term:
             break
         search_terms.append(term)
-    print search_terms
     destination_mbox = raw_input("Destination mailbox file: ")
 
     while current_date <= end_date:
